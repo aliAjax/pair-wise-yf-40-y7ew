@@ -54,6 +54,17 @@ class SQLiteRepository:
                     created_at TEXT NOT NULL,
                     PRIMARY KEY(actor_id, idem_key)
                 );
+                CREATE TABLE IF NOT EXISTS pending_reviews (
+                    id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    submitted_by TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    resolved_by TEXT,
+                    resolved_at TEXT
+                );
             """)
 
     @staticmethod
@@ -195,6 +206,65 @@ class SQLiteRepository:
                 "VALUES (?, ?, ?, ?)",
                 (actor_id, idem_key, entity_id, utcnow()),
             )
+
+    def add_pending_review(self, review_id, kind, payload, reason, actor_id):
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT INTO pending_reviews(id, kind, payload, reason, status, submitted_by, created_at) "
+                "VALUES (?, ?, ?, ?, 'pending', ?, ?)",
+                (
+                    review_id,
+                    kind,
+                    json.dumps(payload, ensure_ascii=False, sort_keys=True),
+                    reason,
+                    actor_id,
+                    utcnow(),
+                ),
+            )
+        return self.get_pending_review(review_id)
+
+    @staticmethod
+    def _review_from_row(row):
+        return {
+            "id": row["id"],
+            "kind": row["kind"],
+            "payload": json.loads(row["payload"]),
+            "reason": row["reason"],
+            "status": row["status"],
+            "submitted_by": row["submitted_by"],
+            "created_at": row["created_at"],
+            "resolved_by": row["resolved_by"],
+            "resolved_at": row["resolved_at"],
+        }
+
+    def get_pending_review(self, review_id):
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT * FROM pending_reviews WHERE id = ?", (review_id,)
+            ).fetchone()
+        return self._review_from_row(row) if row else None
+
+    def list_pending_reviews(self, status=None):
+        with self._connect() as connection:
+            if status:
+                rows = connection.execute(
+                    "SELECT * FROM pending_reviews WHERE status = ? ORDER BY created_at, id",
+                    (status,),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    "SELECT * FROM pending_reviews ORDER BY created_at, id"
+                ).fetchall()
+        return [self._review_from_row(row) for row in rows]
+
+    def resolve_pending_review(self, review_id, status, actor_id):
+        with self._connect() as connection:
+            cursor = connection.execute(
+                "UPDATE pending_reviews SET status = ?, resolved_by = ?, resolved_at = ? "
+                "WHERE id = ? AND status = 'pending'",
+                (status, actor_id, utcnow(), review_id),
+            )
+        return cursor.rowcount > 0
 
     def ping(self):
         with self._connect() as connection:

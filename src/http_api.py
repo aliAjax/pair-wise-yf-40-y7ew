@@ -85,6 +85,17 @@ def create_handler(service, rules, static_dir):
                         return self._send_html(200, handle.read())
                 if parts == ["api", "audit"]:
                     return self._send(200, {"items": service.audit_log()})
+                if parts == ["api", "pending-reviews"]:
+                    query = parse_qs(parsed.query)
+                    status = query.get("status", [None])[0]
+                    return self._send(200, {"items": service.list_pending(status)})
+                if (
+                    len(parts) == 4
+                    and parts[0] == "api"
+                    and parts[1] == "facilities"
+                    and parts[3] == "scope"
+                ):
+                    return self._send(200, service.scope_preview(parts[2]))
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
                     return self._send(200, service.get(parts[2]))
                 if len(parts) >= 2 and parts[0] == "api":
@@ -107,6 +118,36 @@ def create_handler(service, rules, static_dir):
                 parsed = urlparse(self.path)
                 parts = [part for part in parsed.path.split("/") if part]
                 actor = self._actor()
+                if parts == ["api", "stays", "sync"]:
+                    body = self._body()
+                    return self._send(200, service.sync_stays(actor, body.get("items", [])))
+                if (
+                    len(parts) == 4
+                    and parts[0] == "api"
+                    and parts[1] == "facilities"
+                    and parts[3] == "lockdown"
+                ):
+                    body = self._body()
+                    return self._send(
+                        200, service.lockdown(actor, parts[2], reason=body.get("reason"))
+                    )
+                if (
+                    len(parts) == 4
+                    and parts[0] == "api"
+                    and parts[1] == "facilities"
+                    and parts[3] == "recompute"
+                ):
+                    return self._send(200, service.recompute_lockdown(actor))
+                if (
+                    len(parts) == 4
+                    and parts[0] == "api"
+                    and parts[1] == "pending-reviews"
+                    and parts[3] == "resolve"
+                ):
+                    body = self._body()
+                    return self._send(
+                        200, service.resolve_pending(actor, parts[2], body.get("decision"))
+                    )
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
                     body = self._body()
                     action = body.pop("action", None)
