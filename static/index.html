@@ -15,18 +15,36 @@
 <main>
   <h1>植物病虫害检疫与传播追溯</h1>
   <p>这是最小演示页面。使用浏览器或 curl 调用 JSON API。</p>
-  <p><button onclick="checkHealth()">检查服务状态</button></p>
+  <p><button onclick="checkHealth()">检查服务状态</button>
+     <button onclick="loadLockdowns()">查看封控范围</button>
+     <button onclick="loadPending()">查看待核对</button></p>
   <pre id="result">等待操作</pre>
   <h2>常用接口</h2>
   <pre>GET  /health
-GET  /api/&lt;kind&gt;
+GET  /api/&lt;kind&gt;                 kind: consignments | facilities | waybills | stays | lockdowns | pending
 POST /api/&lt;kind&gt;
 GET  /api/entities/&lt;id&gt;
-POST /api/entities/&lt;id&gt;/actions</pre>
+POST /api/entities/&lt;id&gt;/actions  结论先到为准：expected_version 冲突返回 409
+POST /api/offline/sync           断网点登记回连，按现场时间合并，对不上的进待核对</pre>
+  <h2>动作示例</h2>
+  <pre>facility  conclude  {"pest_found": true, "sample_id": "S-1"}
+consignment freeze / unfreeze
+waybill   correct   {"shipped_at": "...", "arrived_at": "..."}
+stay      correct   {"entered_at": "...", "left_at": "..."}
+lockdown  recompute / release
+pending   resolve   {"resolution": "..."}</pre>
 </main>
 <script>
 async function checkHealth() {
   const response = await fetch('/health');
+  document.getElementById('result').textContent = JSON.stringify(await response.json(), null, 2);
+}
+async function loadLockdowns() {
+  const response = await fetch('/api/lockdowns');
+  document.getElementById('result').textContent = JSON.stringify(await response.json(), null, 2);
+}
+async function loadPending() {
+  const response = await fetch('/api/pending');
   document.getElementById('result').textContent = JSON.stringify(await response.json(), null, 2);
 }
 </script>

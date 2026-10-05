@@ -107,6 +107,17 @@ def create_handler(service, rules, static_dir):
                 parsed = urlparse(self.path)
                 parts = [part for part in parsed.path.split("/") if part]
                 actor = self._actor()
+                if len(parts) == 3 and parts[0] == "api" and parts[1] == "offline" and parts[2] == "sync":
+                    body = self._body()
+                    return self._send(
+                        200,
+                        service.sync_offline(
+                            actor,
+                            body.get("records", []),
+                            body.get("point_id"),
+                            body.get("site_recorded_at"),
+                        ),
+                    )
                 if len(parts) == 3 and parts[:2] == ["api", "entities"]:
                     body = self._body()
                     action = body.pop("action", None)

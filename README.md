@@ -25,6 +25,20 @@ python3 app.py --db ./data.db --port 8306
 ## 核心对象
 
 - `consignment`：检疫批次；`facility`：温室、苗圃或下游种植点。
+- `waybill`：运单，记录批次从哪个种植点起运、运到哪里、运送时段。
+- `stay`：棚时记录，记录批次在哪个棚、哪个时段停留，是同期接触判定的依据。
+- `lockdown`：封控记录，按阳性批次、运单溯源和棚时接触计算出的冻结范围。
+- `pending`：待核对记录，断网点回连后对不上的登记单列于此。
+
+## 封控规则
+
+- 一个棚得出阳性结论（`facility` 的 `conclude`，`pest_found=true`）或批次阳性（`consignment` 的 `quarantine`）后，触发封控重算：
+  - 顺运单找上头来源（`trace_upstream`），起运种植点一并冻结；
+  - 同期到过这些棚的批次算作接触（棚时时段重叠），接触批次冻结调运；
+  - 批次和种植点一起冻结，种植点只有在仍有阳性批次撑着时才保持冻结。
+- 运送时段或棚时一变（`waybill`/`stay` 的 `correct`），封控范围立即重算；阳性批次被销毁或放开后，没有阳性撑着的种植点自动放开。
+- 两个管理员同时提交同一个棚的结论时先到为准：后提交的 `expected_version` 对不上，返回 `409 ConflictError`。
+- 断网点登记回连：`POST /api/offline/sync` 按现场时间（`site_recorded_at`）合并；实体不存在或记录冲突的，单列待核对（`GET /api/pending`），由管理员 `resolve`。
 
 ## 主要接口
 
@@ -33,6 +47,7 @@ python3 app.py --db ./data.db --port 8306
 - `POST /api/<kind>`：创建对象；请求体为JSON。
 - `GET /api/entities/<id>`：读取对象当前版本。
 - `POST /api/entities/<id>/actions`：提交`{"action":"动作名","data":{...},"expected_version":数字}`。
+- `POST /api/offline/sync`：断网点登记回连，请求体`{"records":[...],"point_id":"...","site_recorded_at":"..."}`。
 - `GET /api/audit`：读取审计记录。
 
 请求身份通过`X-User-Id`和`X-Role`请求头传入。创建和动作的可执行角色由规则引擎控制。
